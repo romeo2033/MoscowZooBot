@@ -1,10 +1,11 @@
 import telebot
-from telebot import types
-from config import TOKEN, animals, mapping, questions, pics, custody_text, admin_id, commands
 import random
 import time
+import texts
+from telebot import types
 from telebot.apihelper import ApiTelegramException
 from extensions import QuizException, TelegramException
+from config import TOKEN, animals, mapping, questions, pics, admin_id
 
 # Ваш токен Telegram бота
 bot = telebot.TeleBot(TOKEN)
@@ -17,25 +18,19 @@ user_states = {}
 def start_quiz(message):
     chat_id = message.chat.id
     user_states[chat_id] = {'answers': [], 'current_question': 0}
-    bot.send_message(chat_id, "👋 *Привет!\n\nДавай узнаем твое тотемное животное! Рррр...*\n\n_Отвечай на вопросы, используя кнопки ниже._\n\nПомощь: /help", parse_mode='Markdown')
+    bot.send_message(chat_id, texts.hello, parse_mode='Markdown')
     send_question(chat_id)
 
 @bot.message_handler(commands=['help'])
 def show_help(message):
     chat_id = message.chat.id
-    text = '🚨 *Спешу на помощь!*\n\n✅ Вот список доступных команд бота:'
-    for command, description in commands.items():
-        text += f'\n{command} - {description}'
-    text += ('\n\n*🧐 По поводу викторины:*'
-             '\nВикторина проходится путем выбора ответа нажатием на кнопку. После викторины ты получаешь фото с тотемным животным и можешь опубликовать его в соц. сетях.'
-             '\n\n😻 Так же ты можешь узнать больше о программе опекунства после прохождения викторины либо выбрав соответсвующую команду из списка выше.')
+    text = texts.for_help()
     bot.send_message(chat_id, text, parse_mode='Markdown')
-
 
 def restart_quiz(call):
     chat_id = call.message.chat.id
     user_states[chat_id] = {'answers': [], 'current_question': 0}
-    bot.send_message(chat_id, "👋 *Хорошо!\nДавай попробуем ещё раз.*\n\n_Отвечай на вопросы, используя кнопки ниже._", parse_mode='Markdown')
+    bot.send_message(chat_id, texts.restart, parse_mode='Markdown')
     send_question(chat_id)
 
 @bot.message_handler(commands=['custody'])
@@ -44,10 +39,12 @@ def custody_info(call, totem_animal = 'Не прошел тест'):
         chat_id = call.message.chat.id
     except AttributeError:
         chat_id = call.chat.id
+
     markup = types.InlineKeyboardMarkup()
     markup.add(types.InlineKeyboardButton('Подробнее о программе', url='https://moscowzoo.ru/about/guardianship'))
     markup.add(types.InlineKeyboardButton('💬 Сотрудник', callback_data=f'worker_{totem_animal}'))
-    bot.send_message(chat_id, custody_text, parse_mode='Markdown')
+
+    bot.send_message(chat_id, texts.custody, parse_mode='Markdown')
     bot.send_photo(chat_id, open('pics/custody.png', 'rb'),reply_markup=markup)
 
 def info_for_worker(message, totem_animal):
@@ -56,14 +53,13 @@ def info_for_worker(message, totem_animal):
         bot.send_message(admin_id, f'Пользователь хочет связаться с Вами\n\nРезультат викторины: {totem_animal}\n\nКонтактные данные и информация:\n\n📋{message.text}')
     except ApiTelegramException as e:
         if e.description == "Bad Request: chat not found":
-            bot.send_message(chat_id, f'Произошла ошибка, мы скоро всё поправим. Обещаю!')
+            bot.send_message(chat_id, texts.for_error)
             raise TelegramException(f"Ошибка, невозможно отправить сообщение сотруднику Зоопарка")
         else:
-            bot.send_message(chat_id, f'Произошла ошибка, мы скоро всё поправим. Обещаю!')
+            bot.send_message(chat_id, texts.for_error)
             raise TelegramException(f'Ошибка телеграмма: {e}')
     else:
         bot.send_message(chat_id,f'В ближайшее время с тобой свяжется сотрудник Зоопарка.\n\nТвои контактные данные и информация:\n\n📋{message.text}\n\n⏰Ожидай.')
-
 
 @bot.message_handler(commands=['communicate'])
 def chat_with_worker(call, totem_animal = 'Не проходил'):
@@ -142,10 +138,9 @@ def determine_totem_animal(chat_id):
         if characteristic:
             user_characteristics.append(characteristic)
         else:
-            bot.send_message(chat_id, "Произошла ошибка при обработке ответов :(\nНачните викторину заново, нажав /start.", parse_mode='Markdown')
+            bot.send_message(chat_id, texts.quiz_error, parse_mode='Markdown')
             del user_states[chat_id]
             raise QuizException('Ошибка при обработке ответов: ответы пользователя не записаны')
-
 
     # Подсчет совпадений с животными
     scores = {}
@@ -158,6 +153,7 @@ def determine_totem_animal(chat_id):
 
     totem_animal = random.choice(top_animals)
     photo_path = f'pics/{pics[totem_animal]}.jpg'
+
     markup = types.InlineKeyboardMarkup()
     markup.add(types.InlineKeyboardButton('Instagram', url='https://instagram.com'))
     markup.add(types.InlineKeyboardButton('ВКонтакте', url='https://vk.com'))
@@ -165,9 +161,9 @@ def determine_totem_animal(chat_id):
     markup.add(types.InlineKeyboardButton('Попробовать ещё раз?', callback_data='continue_restart'))
     markup.add(types.InlineKeyboardButton('❗️Опекунство❗️', callback_data=f'continue_custody|{totem_animal}'))
 
-    bot.send_message(chat_id, f"Твое тотемное животное...\nБарабанная дробь!", parse_mode='Markdown')
+    bot.send_message(chat_id, texts.totem, parse_mode='Markdown')
     time.sleep(2)
-    bot.send_photo(chat_id, open(photo_path, 'rb'), caption='Опубликуй результат к себе на страничку в соцсетях!\nИли заходи на наш канал 👍\n\n*Не забывай, что можешь стать опекуном своего животного!*\n_Подробнее по кнопке снизу_',reply_markup=markup, parse_mode='Markdown')
+    bot.send_photo(chat_id, open(photo_path, 'rb'), caption=texts.totem_caption, reply_markup=markup, parse_mode='Markdown')
     # Очистка данных пользователя
     del user_states[chat_id]
 
@@ -184,7 +180,7 @@ def map_answer_to_characteristic(question_index, answer, chat_id):
     try:
         return mapping[question_index][answer]
     except KeyError:
-        bot.send_message(chat_id, "Произошла ошибочка... Возвращайся позднее, мы все поправим!")
+        bot.send_message(chat_id, texts.for_error)
         raise QuizException(f"Ошибка: вопрос {question_index}, ответ '{answer}' не найден")
 
 # Запуск бота
