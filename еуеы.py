@@ -1,3 +1,0 @@
-import extensions
-
-print(extensions)
